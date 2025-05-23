@@ -1,7 +1,7 @@
 
 -- I was having a heck of a time figuring out how to make the filepaths play nice, so I just moved
 -- the tests up here; hopefully I can figure this out before trying to benchmark things
-local json = require("json")
+local json = require("coroutinejson")
 
 
 local fmt = string.format
