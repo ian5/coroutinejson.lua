@@ -269,7 +269,7 @@ local function parse_string(str, i)
     elseif char == 34 then -- `"`: End of string
       -- Add the last chunk to the final string
       resolved = resolved .. str:sub(chunk_start, chunk_end - 1)
-      -- Return the final string, and the index immediately following the end of this string in the wider JSON
+      -- Return the final string, and the index the parent function should resume from (immediately after the end of this string)
       return resolved, chunk_end + 1
     end
     -- Move the right side of the current chunk to the next character
@@ -280,14 +280,18 @@ local function parse_string(str, i)
 end
 
 
-local function parse_number(str, i)
-  local x = next_char(str, i, delim_chars)
-  local s = str:sub(i, x - 1)
-  local n = tonumber(s)
-  if not n then
-    decode_error(str, i, "invalid number '" .. s .. "'")
+local function parse_number(str, index)
+  -- Find the last string index that's part of this number
+  local last_index = next_char(str, index, delim_chars)
+  -- Get the string representing the number
+  local number_string = str:sub(index, number_end - 1)
+  local num = tonumber(number_string)
+  -- Convert it to a number (by lua's native format!)
+  if not num then
+    decode_error(str, index, "invalid number '" .. s .. "'")
   end
-  return n, x
+  -- Give back the number, and the index the parent function should resume from (immediately after the end of this string)
+  return num, last_index
 end
 
 
