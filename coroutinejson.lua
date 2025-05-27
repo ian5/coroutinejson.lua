@@ -290,8 +290,8 @@ local function parse_number(str, index)
   local last_index = next_char(str, index, delim_chars)
   -- Get the string representing the number
   local number_string = str:sub(index, last_index - 1)
-  local num = tonumber(number_string)
   -- Convert it to a number (by lua's native format!)
+  local num = tonumber(number_string)
   if not num then
     decode_error(str, index, "invalid number '" .. s .. "'")
   end
@@ -353,40 +353,54 @@ local function parse_array(str, index)
 end
 
 
-local function parse_object(str, i)
-  local res = {}
-  i = i + 1
+local function parse_object(str, index)
+  -- Create the table the object will go into
+  local resolved = {}
+  -- Start from the character after the opening {
+  index = index + 1
+  -- Until we're done 
   while 1 do
     local key, val
-    i = next_char(str, i, space_chars, true)
-    -- Empty / end of object?
-    if str:sub(i, i) == "}" then
-      i = i + 1
+    -- Find the next non whitespace character
+    index = next_char(str, index, space_chars, true)
+    -- If it's the end of the object
+    if str:sub(index, index) == "}" then
+      -- Put the index right after the object
+      index = index + 1
+      -- And we're done
       break
     end
-    -- Read key
-    if str:sub(i, i) ~= '"' then
-      decode_error(str, i, "expected string for key")
+    -- Unless it's not the start of a key
+    if str:sub(index, index) ~= '"' then
+      decode_error(str, index, "expected string for key")
     end
-    key, i = parse(str, i)
-    -- Read ':' delimiter
-    i = next_char(str, i, space_chars, true)
-    if str:sub(i, i) ~= ":" then
-      decode_error(str, i, "expected ':' after key")
+    -- Get the string of the key, and move the index in the main string after it 
+    key, index = parse(str, index)
+    -- Find the next non whitespace character
+    index = next_char(str, index, space_chars, true)
+    -- And unless it's not the delimiter
+    if str:sub(index, index) ~= ":" then
+      decode_error(str, index, "expected ':' after key")
     end
-    i = next_char(str, i + 1, space_chars, true)
-    -- Read value
-    val, i = parse(str, i)
-    -- Set
-    res[key] = val
-    -- Next token
-    i = next_char(str, i, space_chars, true)
-    local chr = str:sub(i, i)
-    i = i + 1
+    -- Go to the next non whitespace character
+    index = next_char(str, index + 1, space_chars, true)
+    -- And read the value
+    val, index = parse(str, index)
+    -- Save that pair
+    resolved[key] = val
+    -- Move to next token
+    index = next_char(str, index, space_chars, true)
+    -- Get the first character of it
+    local chr = str:sub(index, index)
+    -- Then move past it
+    index = index + 1
+    -- If it was the end of the object, we're done 
     if chr == "}" then break end
-    if chr ~= "," then decode_error(str, i, "expected '}' or ','") end
+    -- If it wasn't that or a comma, it's broken
+    if chr ~= "," then decode_error(str, index, "expected '}' or ','") end
   end
-  return res, i
+  -- Give back the object and the index immediately after it 
+  return resolved, index
 end
 
 
