@@ -289,7 +289,7 @@ local function parse_number(str, index)
   -- Find the last string index that's part of this number
   local last_index = next_char(str, index, delim_chars)
   -- Get the string representing the number
-  local number_string = str:sub(index, number_end - 1)
+  local number_string = str:sub(index, last_index - 1)
   local num = tonumber(number_string)
   -- Convert it to a number (by lua's native format!)
   if not num then
