@@ -167,13 +167,17 @@ local literal_map = {
   [ "null"  ] = nil,
 }
 
-
+-- Find the first occurance in str of a character from set after idx; if negated, look for any character *not* in set
 local function next_char(str, idx, set, negate)
+  -- For each position from the starting index to the end of the string
   for i = idx, #str do
+    -- If we find the character we're looking for
     if set[str:sub(i, i)] ~= negate then
+      -- Return its index
       return i
     end
   end
+  -- Otherwise, return one more than the end of the string
   return #str + 1
 end
 
