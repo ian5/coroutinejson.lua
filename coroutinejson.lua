@@ -295,13 +295,17 @@ local function parse_number(str, index)
 end
 
 
-local function parse_literal(str, i)
-  local x = next_char(str, i, delim_chars)
-  local word = str:sub(i, x - 1)
+local function parse_literal(str, index)
+  -- Find the end of the literal
+  local last_index = next_char(str, index, delim_chars)
+  -- Use that to get the string representing the literal
+  local word = str:sub(index, last_index - 1)
+  -- Fail if the literal doesn't exist
   if not literals[word] then
-    decode_error(str, i, "invalid literal '" .. word .. "'")
+    decode_error(str, index, "invalid literal '" .. word .. "'")
   end
-  return literal_map[word], x
+  -- Return the literal, and the index the parent function should resume from (immediately after the literal)
+  return literal_map[word], last_index
 end
 
 
