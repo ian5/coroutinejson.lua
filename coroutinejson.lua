@@ -243,7 +243,7 @@ local function parse_string(str, i)
     -- If we're looking at an escape sequence
     elseif char == 92 then -- `\`: Escape
       -- Append the last chunk to the final string
-      resolved = resolved .. str:sub(k, chunk_end - 1)
+      resolved = resolved .. str:sub(chunk_start, chunk_end - 1)
       
       -- Set the end of the chunk to the next character
       chunk_end = chunk_end + 1
