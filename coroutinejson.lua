@@ -30,6 +30,7 @@ local json = { _version = "0.1.2" }
 
 local encode
 
+-- This table is both really funny looking and maps certain special characters to their escape sequence
 local escape_char_map = {
   [ "\\" ] = "\\",
   [ "\"" ] = "\"",
@@ -40,17 +41,21 @@ local escape_char_map = {
   [ "\t" ] = "t",
 }
 
+-- This table inverts the escape table, thus mapping escape sequences to their special character
 local escape_char_map_inv = { [ "/" ] = "/" }
 for k, v in pairs(escape_char_map) do
   escape_char_map_inv[v] = k
 end
 
-
+-- Return an escape sequence for the given character
 local function escape_char(c)
-  return "\\" .. (escape_char_map[c] or string.format("u%04x", c:byte()))
+  -- If it's a character with a special escape sequence, use that
+  return "\\" .. (escape_char_map[c] or 
+  -- Otherwise, we have to encode it by character code
+  string.format("u%04x", c:byte()))
 end
 
-
+-- Encode nil as a null value
 local function encode_nil(val)
   return "null"
 end
@@ -120,7 +125,7 @@ local type_func_map = {
   [ "boolean" ] = tostring,
 }
 
-
+-- Encode a specific value 
 encode = function(val, stack)
   local t = type(val)
   local f = type_func_map[t]
@@ -130,8 +135,9 @@ encode = function(val, stack)
   error("unexpected type '" .. t .. "'")
 end
 
-
+-- Encode a lua value as a JSON string and return it
 function json.encode(val)
+  -- This function is only a wrapper, so that the user can't mess with the recursive encode function directly
   return ( encode(val) )
 end
 
@@ -214,42 +220,60 @@ local function parse_unicode_escape(s)
   end
 end
 
-
+-- TODO: refactor this to use table.concat instead of repeated concatenation operations
 local function parse_string(str, i)
-  local res = ""
-  local j = i + 1
-  local k = j
+  local resolved = ""
+  local chunk_end = i + 1
+  local chunk_start = chunk_end
 
-  while j <= #str do
-    local x = str:byte(j)
+  -- Until we're finished processing the string
+  while chunk_end <= #str do
+    -- Check the next character of the string as a number
+    local char = str:byte(chunk_end)
 
-    if x < 32 then
-      decode_error(str, j, "control character in string")
+    -- Error if it's a control code; json forbids control characters within strings
+    if char < 32 then
+      decode_error(str, chunk_end, "control character in string")
 
-    elseif x == 92 then -- `\`: Escape
-      res = res .. str:sub(k, j - 1)
-      j = j + 1
-      local c = str:sub(j, j)
-      if c == "u" then
-        local hex = str:match("^[dD][89aAbB]%x%x\\u%x%x%x%x", j + 1)
-                 or str:match("^%x%x%x%x", j + 1)
-                 or decode_error(str, j - 1, "invalid unicode escape in string")
-        res = res .. parse_unicode_escape(hex)
-        j = j + #hex
+    -- If we're looking at an escape sequence
+    elseif char == 92 then -- `\`: Escape
+      -- Append the last chunk to the final string
+      resolved = resolved .. str:sub(k, chunk_end - 1)
+      
+      -- Set the end of the chunk to the next character
+      chunk_end = chunk_end + 1
+      -- And get that character
+      local escape = str:sub(chunk_end, chunk_end)
+      -- If this is a hex escape string...
+      if escape == "u" then
+        -- Get the contents of the hex code
+        local hex = str:match("^[dD][89aAbB]%x%x\\u%x%x%x%x", chunk_end + 1)
+                 or str:match("^%x%x%x%x", chunk_end + 1)
+                 or decode_error(str, chunk_end - 1, "invalid unicode escape in string")
+        -- And append that character to the final string
+        resolved = resolved .. parse_unicode_escape(hex)
+        -- Then move the right side of the chunk past the escape sequence
+        chunk_end = chunk_end + #hex
+      -- If this is not a hex escape string...
       else
-        if not escape_chars[c] then
-          decode_error(str, j - 1, "invalid escape char '" .. c .. "' in string")
+        -- Check if it's one of the special escapes
+        if not escape_chars[escape] then
+          decode_error(str, chunk_end - 1, "invalid escape char '" .. escape .. "' in string")
         end
-        res = res .. escape_char_map_inv[c]
+        -- And if it is, append that to the final string 
+        resolved = resolved .. escape_char_map_inv[escape]
       end
-      k = j + 1
-
-    elseif x == 34 then -- `"`: End of string
-      res = res .. str:sub(k, j - 1)
-      return res, j + 1
+      -- Regardless, the start of the next chunk is after the final string
+      chunk_start = chunk_end + 1
+    -- If this is the end of the string
+    elseif char == 34 then -- `"`: End of string
+      -- Add the last chunk to the final string
+      resolved = resolved .. str:sub(chunk_start, chunk_end - 1)
+      -- Return the final string, and the index immediately following the end of this string in the wider JSON
+      return resolved, chunk_end + 1
     end
-
-    j = j + 1
+    -- Move the right side of the current chunk to the next character
+    chunk_end = chunk_end + 1
   end
 
   decode_error(str, i, "expected closing quote for string")
@@ -363,21 +387,32 @@ local char_func_map = {
 
 
 parse = function(str, idx)
+  -- Get the character at the index we're working with
   local chr = str:sub(idx, idx)
+  -- Find the parsing function associated with it
   local f = char_func_map[chr]
+  -- And call it with the input and our current working index
   if f then
     return f(str, idx)
   end
+  -- If we didn't find that then it's broken
   decode_error(str, idx, "unexpected character '" .. chr .. "'")
 end
 
 
 function json.decode(str)
+  -- This function expects a string
   if type(str) ~= "string" then
     error("expected argument of type string, got " .. type(str))
   end
-  local res, idx = parse(str, next_char(str, 1, space_chars, true))
+  -- The parsing routine is a recursive function 
+  -- Retrieve the output table and the last index of the string that was processed...
+  local res, idx = 
+  -- ...from the input, starting from the  first non-whitespace character
+  parse(str, next_char(str, 1, space_chars, true))
+  -- Run the index past any trailing whitespace
   idx = next_char(str, idx, space_chars, true)
+  -- If we still haven't covered the whole string, there's trailing garbage
   if idx <= #str then
     decode_error(str, idx, "trailing garbage")
   end
