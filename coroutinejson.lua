@@ -148,6 +148,7 @@ end
 
 local parse
 
+-- helper function to create the character sets
 local function create_set(...)
   local res = {}
   for i = 1, select("#", ...) do
@@ -313,30 +314,42 @@ local function parse_literal(str, index)
 end
 
 
-local function parse_array(str, i)
-  local res = {}
-  local n = 1
-  i = i + 1
+local function parse_array(str, index)
+  -- We start with no items in the array
+  local resolved = {}
+  -- And we first try to process item 1 of the array
+  local array_index = 1
+  -- And the character *after* the opening [ 
+  index = index + 1
+  -- Until we're done with the array
   while 1 do
-    local x
-    i = next_char(str, i, space_chars, true)
-    -- Empty / end of array?
-    if str:sub(i, i) == "]" then
-      i = i + 1
+    -- Find the next non whitespace character
+    index = next_char(str, index, space_chars, true)
+    -- If it's the end of the array, we're done here
+    if str:sub(index, index) == "]" then
+      -- The last index is *after* the end of the array 
+      index = index + 1
       break
     end
     -- Read token
-    x, i = parse(str, i)
-    res[n] = x
-    n = n + 1
-    -- Next token
-    i = next_char(str, i, space_chars, true)
-    local chr = str:sub(i, i)
-    i = i + 1
+    local value
+    -- Get the value and end point of the array item
+    value, index = parse(str, index)
+    -- Add that item to the final array
+    resolved[array_index] = value
+    -- Move on to the next index
+    array_index = array_index + 1
+    -- Find the index of the next non whitespace character
+    index = next_char(str, index, space_chars, true)
+    -- And find that character
+    local chr = str:sub(index, index)
+    index = index + 1
+    -- If it's the end of the array we're done 
     if chr == "]" then break end
-    if chr ~= "," then decode_error(str, i, "expected ']' or ','") end
+    -- If it's neither that nor the next item, it's malformed
+    if chr ~= "," then decode_error(str, index, "expected ']' or ','") end
   end
-  return res, i
+  return resolved, index
 end
 
 
