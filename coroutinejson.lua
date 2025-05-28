@@ -226,9 +226,9 @@ local function parse_unicode_escape(s)
 end
 
 -- TODO: refactor this to use table.concat instead of repeated concatenation operations
-local function parse_string(str, i)
+local function parse_string(str, index)
   local resolved = ""
-  local chunk_end = i + 1
+  local chunk_end = index + 1
   local chunk_start = chunk_end
 
   -- Until we're finished processing the string
@@ -323,6 +323,8 @@ local function parse_array(str, index)
   index = index + 1
   -- Until we're done with the array
   while 1 do
+    -- Yield once per item in the array
+    coroutine.yield()
     -- Find the next non whitespace character
     index = next_char(str, index, space_chars, true)
     -- If it's the end of the array, we're done here
@@ -360,6 +362,8 @@ local function parse_object(str, index)
   index = index + 1
   -- Until we're done 
   while 1 do
+    -- Yield once per object property
+    coroutine.yield()
     local key, val
     -- Find the next non whitespace character
     index = next_char(str, index, space_chars, true)
@@ -432,14 +436,13 @@ parse = function(str, idx)
   local f = char_func_map[chr]
   -- And call it with the input and our current working index
   if f then
-    return f(str, idx)
+    return f(str, idx, iterations)
   end
   -- If we didn't find that then it's broken
   decode_error(str, idx, "unexpected character '" .. chr .. "'")
 end
 
-
-function json.decode(str)
+local function coroutine_decoder(str)
   -- This function expects a string
   if type(str) ~= "string" then
     error("expected argument of type string, got " .. type(str))
@@ -456,6 +459,27 @@ function json.decode(str)
     decode_error(str, idx, "trailing garbage")
   end
   return res
+end
+
+-- Return the coroutine decoder directly
+function json.coroutine_decoder()
+  return coroutine.create(coroutine_decoder)
+end
+
+-- Automatically run through a whole string, ignoring all the coroutine mechanics
+function json.decode(str)
+  -- Make the coroutine for this object
+  local co = json.coroutine_decoder()
+  local success, output
+  -- Until the coroutine is done 
+  repeat 
+    -- Gather the informatino from the coroutine
+    success, output = coroutine.resume(co, str)
+    -- If there was an error, propigate it up
+    if not success then error(output) end 
+  until coroutine.status(co) == 'dead'
+  -- Once the decoder is done, give the output
+  return output
 end
 
 
