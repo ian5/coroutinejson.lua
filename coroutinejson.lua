@@ -24,6 +24,8 @@
 
 local json = { _version = "0.1.2" }
 
+local unfinished = {}
+
 -------------------------------------------------------------------------------
 -- Encode
 -------------------------------------------------------------------------------
@@ -482,5 +484,28 @@ function json.decode(str)
   return output
 end
 
+local decoder_metatable = {
+  __index = {
+    -- Run the decoder for a specified number of iterations
+    work = function(iterations)
+
+    end,
+    -- Directly resume the decoder until it next yields
+    resume = function()
+
+    end
+  } 
+}
+
+-- Return a decoder object, which handles a single json string
+function json.decoder(str)
+  -- Create the table for this object
+  local obj = {
+    string = str,
+    json = {}
+  }
+  -- Get a fresh decoder coroutine
+  local decoder = json.coroutine_decoder()
+end
 
 return json
