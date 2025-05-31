@@ -481,7 +481,7 @@ function json.decode(str)
     -- Gather the informatino from the coroutine
     success, output = coroutine.resume(co, str)
     -- If there was an error, propigate it up
-    if not success then error(output) end 
+    if not success then error(output) end
   until coroutine.status(co) == 'dead'
   -- Once the decoder is done, give the output
   return output
@@ -496,9 +496,16 @@ local decoder_metatable = {
   __index = {
     -- Run the decoder for a specified number of iterations. Returns the loaded object if it finishes.
     work = function(self, iterations)
-
+      -- As many times as we were asked to
+      for i=1, iterations do
+        -- Run an iteration
+        local complete, output = self:resume()
+        -- And if we're done, return it
+        if complete then return output end
+      end
+    -- If we haven't returned yet, the coroutine didn't finish; we don't return anything 
     end,
-    -- Directly resume the decoder until it next yields. Returns the loaded object if it finishes.
+    -- Directly resume the decoder until it next yields. Returns whether it was completed, and the most recent output from the decoder
     resume = function(self)
       -- Gather the coroutine outputs
       local success, output = coroutine.resume(self.coroutine, self.string)
@@ -510,6 +517,15 @@ local decoder_metatable = {
       local complete = coroutine.status(self.coroutine) == "dead"
       return complete, output
     end,
+    -- Decode the entire remainder of the table in blocking fashion
+    decode = function(self)
+      local complete, output 
+      -- Until we're done
+      repeat
+        complete, output = self:resume()
+      until complete
+      return output
+    end
   } 
 }
 
