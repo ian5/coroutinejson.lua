@@ -2,7 +2,7 @@
 -- I was having a heck of a time figuring out how to make the filepaths play nice, so I just moved
 -- the tests up here; hopefully I can figure this out before trying to benchmark things
 local json = require("coroutinejson")
-
+pprint = require("pprint")
 
 local fmt = string.format
 
@@ -33,6 +33,11 @@ local function equal(a, b)
   end
   -- Handle scalar
   return a == b
+end
+
+local function u(tbl) -- mark a table as unfinished
+  tbl[json.unfinished] = true
+  return tbl
 end
 
 
@@ -202,6 +207,34 @@ test("decode collection", function()
   end
 end)
 
+test("decode via decoder.resume", function()
+  local t = {
+    ['[1, 2, 3, 4, 5, 6]'] = {
+      u{},
+      u{1},
+      u{1, 2},
+      u{1, 2, 3},
+      u{1, 2, 3, 4},
+      u{1, 2, 3, 4, 5},
+       {1, 2, 3, 4, 5, 6}},
+    ['{ "name": "test", "id": 231 }'] = {
+        u{},
+        u{name = "test"},
+         {name = "test", id = 231}
+      }
+  }
+  for k, v in pairs(t) do
+    local decoder = json.decoder(k)
+    local length = #v
+    local complete, res
+    for progress, value in ipairs(v) do
+      assert( not complete, fmt("'%s' completed early", k))
+      complete, res = decoder:resume(k)
+      assert( equal(res, v[progress]), fmt("'%s' did not equal expected on iteration '%d'", k, progress))
+    end
+    assert( complete, fmt("'%s' did not complete", k))
+  end
+end)
 
 test("encode invalid", function()
   local t = {
