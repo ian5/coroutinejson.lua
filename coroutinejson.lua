@@ -24,7 +24,7 @@
 
 local json = { _version = "0.1.2" }
 
-local unfinished = {}
+json.unfinished = {}
 
 -------------------------------------------------------------------------------
 -- Encode
@@ -317,8 +317,8 @@ end
 
 
 local function parse_array(str, index)
-  -- We start with no items in the array
-  local resolved = {}
+  -- We mark the array as incomplete with the marker
+  local resolved = {[json.unfinished] = true}
   -- And we first try to process item 1 of the array
   local array_index = 1
   -- And the character *after* the opening [ 
@@ -326,7 +326,7 @@ local function parse_array(str, index)
   -- Until we're done with the array
   while 1 do
     -- Yield once per item in the array
-    coroutine.yield()
+    coroutine.yield(resolved)
     -- Find the next non whitespace character
     index = next_char(str, index, space_chars, true)
     -- If it's the end of the array, we're done here
@@ -353,19 +353,21 @@ local function parse_array(str, index)
     -- If it's neither that nor the next item, it's malformed
     if chr ~= "," then decode_error(str, index, "expected ']' or ','") end
   end
+  -- The array is done; ergo it is not unfinished anymore
+  resolved[json.unfinished] = nil
   return resolved, index
 end
 
 
 local function parse_object(str, index)
-  -- Create the table the object will go into
-  local resolved = {}
+  -- The table isn't finished yet when we create it 
+  local resolved = {[json.unfinished] = true}
   -- Start from the character after the opening {
   index = index + 1
   -- Until we're done 
   while 1 do
     -- Yield once per object property
-    coroutine.yield()
+    coroutine.yield(resolved)
     local key, val
     -- Find the next non whitespace character
     index = next_char(str, index, space_chars, true)
@@ -406,6 +408,7 @@ local function parse_object(str, index)
     if chr ~= "," then decode_error(str, index, "expected '}' or ','") end
   end
   -- Give back the object and the index immediately after it 
+  resolved[json.unfinished] = nil
   return resolved, index
 end
 
@@ -444,7 +447,7 @@ parse = function(str, idx)
   decode_error(str, idx, "unexpected character '" .. chr .. "'")
 end
 
-local function coroutine_decoder(str)
+local function coroutine_decode(str)
   -- This function expects a string
   if type(str) ~= "string" then
     error("expected argument of type string, got " .. type(str))
@@ -464,14 +467,14 @@ local function coroutine_decoder(str)
 end
 
 -- Return the coroutine decoder directly
-function json.coroutine_decoder()
-  return coroutine.create(coroutine_decoder)
+function json.coroutine_decode()
+  return coroutine.create(coroutine_decode)
 end
 
 -- Automatically run through a whole string, ignoring all the coroutine mechanics
 function json.decode(str)
   -- Make the coroutine for this object
-  local co = json.coroutine_decoder()
+  local co = json.coroutine_decode()
   local success, output
   -- Until the coroutine is done 
   repeat 
@@ -484,16 +487,29 @@ function json.decode(str)
   return output
 end
 
+-- This function checks if the provided table has the unfinished flag set
+function json.complete(tbl)
+  return not tbl[unfinished]
+end
+
 local decoder_metatable = {
   __index = {
-    -- Run the decoder for a specified number of iterations
-    work = function(iterations)
+    -- Run the decoder for a specified number of iterations. Returns the loaded object if it finishes.
+    work = function(self, iterations)
 
     end,
-    -- Directly resume the decoder until it next yields
-    resume = function()
-
-    end
+    -- Directly resume the decoder until it next yields. Returns the loaded object if it finishes.
+    resume = function(self)
+      -- Gather the coroutine outputs
+      local success, output = coroutine.resume(self.coroutine, self.string)
+      -- If the decoder threw an error, propigate that
+      if not success then error(output) end
+      -- Update the contents of the decoder (although it should be pretty rare that it's not the same table? seems prudent but maybe could cut this)
+      self.contents = output
+      -- If the coroutine returned, then we're done decoding this table
+      local complete = coroutine.status(self.coroutine) == "dead"
+      return complete, output
+    end,
   } 
 }
 
@@ -502,10 +518,12 @@ function json.decoder(str)
   -- Create the table for this object
   local obj = {
     string = str,
-    json = {}
+    json = {},
+    -- Create the coroutine this object wraps
+    coroutine = json.coroutine_decode()
   }
-  -- Get a fresh decoder coroutine
-  local decoder = json.coroutine_decoder()
+  setmetatable(obj, decoder_metatable)
+  return obj
 end
 
 return json
