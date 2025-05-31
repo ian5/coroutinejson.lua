@@ -1,6 +1,8 @@
 # ![json.lua](https://cloud.githubusercontent.com/assets/3920290/9281532/99e5e0cc-42bd-11e5-8fce-eaff2f7fc681.png)
 A lightweight JSON library for Lua
-
+This is a rather unfinished fork of it to make it work with coroutines; this readme
+is outdated but if you're really itching to use it for something, the comments in 
+the library should make it relatively easy to understand the new functions.
 
 ## Features
 * Implemented in pure Lua: works with 5.1, 5.2, 5.3 and JIT
