@@ -236,6 +236,27 @@ test("decode via decoder.resume", function()
   end
 end)
 
+test("decode via decoder.work", function()
+  local t = {}
+  do 
+    local items = {}
+    math.randomseed(38912)
+    for k=1, 100 do items[k] = math.random(999) end
+    t['['.. table.concat(items, ',') ..']'] = items
+  end
+  for k, v in pairs(t) do
+    local decoder = json.decoder(k)
+    local out 
+    for i=1,#v//2 do
+      assert(not decoder:work(2), 'returned early')
+    end
+    out = decoder:work(1) -- one extra iteration to mark the table as finished
+    pprint(out)
+    pprint(v)
+    assert(equal(out, v), 'incorrect result')
+  end
+end)
+
 test("encode invalid", function()
   local t = {
     { [1000] = "b" },
